@@ -74,6 +74,29 @@ class SubmissionSecurityTests(unittest.TestCase):
             self.assertEqual(entries["Comment"], "x=y")
             self.assertEqual(entries["Whitelist"], "GPU01,GPU02")
 
+    def test_batch_name_and_job_dependencies(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            path = root / "job.txt"
+            ids = "6afcc9877c33cbd2b549d301,6afccffa915dea868fb73e58"
+            config = self.job_config(root)
+            config.update(batch_name="shot010 = bg swap", job_dependencies=ids)
+            DeadlineJobSubmitter({}, config)._write_job_info(str(path))
+            entries = dict(line.split("=", 1) for line in path.read_text(encoding="utf-8").splitlines())
+            self.assertEqual(entries["BatchName"], "shot010 = bg swap")
+            self.assertEqual(entries["JobDependencies"], ids)
+
+            DeadlineJobSubmitter({}, self.job_config(root))._write_job_info(str(path))
+            text = path.read_text(encoding="utf-8")
+            self.assertNotIn("BatchName", text)
+            self.assertNotIn("JobDependencies", text)
+
+            for key, value in (("job_dependencies", "abc"), ("job_dependencies", ids + "\nPriority=100"), ("batch_name", "a\nPriority=100")):
+                config = self.job_config(root)
+                config[key] = value
+                with self.subTest(key=key, value=value), self.assertRaises(ValueError):
+                    DeadlineJobSubmitter({}, config)._write_job_info(str(path))
+
     def test_deadline_command_uses_argument_vector_without_shell(self):
         process = MagicMock(returncode=0)
         process.communicate.return_value = (b"JobID=test", b"")

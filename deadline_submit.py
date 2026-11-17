@@ -472,7 +472,7 @@ class DeadlineJobSubmitter:
         chunk_size = max(1, int(config["chunk_size"]))
         output_dir = os.path.abspath(config["output_directory"])
 
-        for key in ("job_name", "comment", "department", "pool", "group", "output_directory"):
+        for key in ("job_name", "batch_name", "comment", "department", "pool", "group", "output_directory"):
             _deadline_value(config.get(key, ""))
         if config.get("spool_package"):
             for key in ("submissionId", "attemptId"):
@@ -480,6 +480,8 @@ class DeadlineJobSubmitter:
         with open(path, "w", encoding="utf-8") as handle:
             handle.write("Plugin=ComfyUI\n")
             handle.write(f"Name={config['job_name']}\n")
+            if config.get("batch_name"):
+                handle.write(f"BatchName={config['batch_name']}\n")
             handle.write(f"Comment={config.get('comment', '')}\n")
             handle.write(f"Department={config.get('department', '')}\n")
             handle.write(f"Pool={'' if config['pool'] == 'none' else config['pool']}\n")
@@ -498,6 +500,11 @@ class DeadlineJobSubmitter:
                 if not re.fullmatch(r"[A-Za-z0-9_,.\-]+", machine_list):
                     raise ValueError("Machine list must contain comma-separated Worker names.")
                 handle.write(f"Whitelist={machine_list}\n")
+            job_dependencies = config.get("job_dependencies", "")
+            if job_dependencies:
+                if not re.fullmatch(r"[0-9a-fA-F]{24}(,[0-9a-fA-F]{24})*", job_dependencies):
+                    raise ValueError("Job dependencies must be comma-separated Deadline job IDs (24 hex characters).")
+                handle.write(f"JobDependencies={job_dependencies}\n")
 
     def _write_plugin_info(self, path: str) -> None:
         config = self.job_config
@@ -621,6 +628,8 @@ class DeadlineSubmitNode:
                 "comment": ("STRING", {"default": ""}),
                 "department": ("STRING", {"default": ""}),
                 "machine_list": ("STRING", {"default": "", "tooltip": "Optional comma-separated Deadline Worker allowlist."}),
+                "batch_name": ("STRING", {"default": "", "tooltip": "Optional Deadline batch name; jobs with the same name are grouped in the Monitor."}),
+                "job_dependencies": ("STRING", {"default": "", "tooltip": "Optional comma-separated Deadline job IDs this job waits for (e.g. the job_id output of another Deadline Submit node)."}),
                 "disable_dynamic_vram": ("BOOLEAN", {"default": False}),
                 "reserve_vram": ("FLOAT", {"default": 0.0, "min": 0.0, "max": 64.0, "step": 0.5, "tooltip": "GB reserved for activations and other GPU users."}),
             },
@@ -672,6 +681,8 @@ class DeadlineSubmitNode:
         comment="",
         department="",
         machine_list="",
+        batch_name="",
+        job_dependencies="",
         disable_dynamic_vram=False,
         reserve_vram=0.0,
         prompt=None,
@@ -728,6 +739,8 @@ class DeadlineSubmitNode:
                 "comment": comment,
                 "department": department,
                 "machine_list": ",".join(part.strip() for part in machine_list.split(",") if part.strip()),
+                "batch_name": batch_name.strip(),
+                "job_dependencies": ",".join(part.strip() for part in job_dependencies.split(",") if part.strip()),
                 "disable_dynamic_vram": disable_dynamic_vram,
                 "reserve_vram": reserve_vram,
             }
