@@ -5,6 +5,7 @@ This module owns the ComfyUI-side submission flow. It packages the current API
 prompt, stages referenced input assets, and submits a render job to Deadline.
 """
 
+import asyncio
 import copy
 import filecmp
 import hashlib
@@ -183,6 +184,11 @@ class DeadlineCommandHelper:
         if process.returncode != 0:
             raise RuntimeError(f"deadlinecommand failed with code {process.returncode}: {errors or output}")
         return output
+
+    @staticmethod
+    def get_worker_names() -> List[str]:
+        output = DeadlineCommandHelper.call_deadline_command(["-GetSlaveNames"])
+        return sorted({line.strip() for line in output.splitlines() if line.strip()}, key=str.lower)
 
     @staticmethod
     def get_job_id_from_submission(submission_results: str) -> str:
@@ -627,7 +633,7 @@ class DeadlineSubmitNode:
             "optional": {
                 "comment": ("STRING", {"default": ""}),
                 "department": ("STRING", {"default": ""}),
-                "machine_list": ("STRING", {"default": "", "tooltip": "Optional comma-separated Deadline Worker allowlist."}),
+                "machine_list": ("STRING", {"default": "", "tooltip": "Optional comma-separated Deadline Worker allowlist. Use the 'Select workers' button to pick from the farm; names are checked against the farm on submit."}),
                 "batch_name": ("STRING", {"default": "", "tooltip": "Optional Deadline batch name; jobs with the same name are grouped in the Monitor."}),
                 "job_dependencies": ("STRING", {"default": "", "tooltip": "Optional comma-separated Deadline job IDs this job waits for (e.g. the job_id output of another Deadline Submit node)."}),
                 "disable_dynamic_vram": ("BOOLEAN", {"default": False}),
@@ -669,6 +675,21 @@ class DeadlineSubmitNode:
             print(f"Deadline Submission: Could not query Deadline groups: {exc}")
             return [NodeDefaults.GROUP]
 
+    @staticmethod
+    def _check_machine_list(machine_list: str) -> str:
+        names = [part.strip() for part in machine_list.split(",") if part.strip()]
+        if not names:
+            return ""
+        try:
+            known = {name.lower() for name in DeadlineCommandHelper.get_worker_names()}
+        except Exception as exc:
+            print(f"Deadline Submission: Could not verify machine_list against the farm: {exc}")
+            return ",".join(names)
+        unknown = [name for name in names if name.lower() not in known]
+        if unknown:
+            raise ValueError(f"Unknown Deadline Worker(s) in machine_list: {', '.join(unknown)}")
+        return ",".join(names)
+
     def submit_to_deadline(
         self,
         output_directory,
@@ -691,6 +712,7 @@ class DeadlineSubmitNode:
     ):
         try:
             output_directory = self._prepare_output_directory(output_directory)
+            machine_list = self._check_machine_list(machine_list)
             batch_count = max(1, int(batch_count))
             chunk_size = max(1, min(int(chunk_size), batch_count))
             spool_package = copy.deepcopy((extra_pnginfo or {}).get("spoolSubmission"))
@@ -738,7 +760,7 @@ class DeadlineSubmitNode:
                 "standard_workflow": standard_workflow,
                 "comment": comment,
                 "department": department,
-                "machine_list": ",".join(part.strip() for part in machine_list.split(",") if part.strip()),
+                "machine_list": machine_list,
                 "batch_name": batch_name.strip(),
                 "job_dependencies": ",".join(part.strip() for part in job_dependencies.split(",") if part.strip()),
                 "disable_dynamic_vram": disable_dynamic_vram,
@@ -909,6 +931,14 @@ def register_on_prompt_handler() -> None:
                     "comfyui_root": os.path.abspath(folder_paths.base_path),
                 })
             print(f"Deadline Submission: Registered endpoint identity {DEADLINE_ENDPOINT_SESSION_ID}.")
+
+            @instance.routes.get("/deadline/workers")
+            async def deadline_workers(_request):
+                try:
+                    workers = await asyncio.get_running_loop().run_in_executor(None, DeadlineCommandHelper.get_worker_names)
+                except Exception as exc:
+                    return web.json_response({"error": str(exc)}, status=502)
+                return web.json_response({"workers": workers})
     except Exception as exc:
         print(f"Deadline Submission: Could not register endpoint identity route: {exc}")
 

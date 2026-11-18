@@ -74,6 +74,16 @@ class SubmissionSecurityTests(unittest.TestCase):
             self.assertEqual(entries["Comment"], "x=y")
             self.assertEqual(entries["Whitelist"], "GPU01,GPU02")
 
+    def test_machine_list_is_checked_against_farm_workers(self):
+        with patch.object(DeadlineCommandHelper, "call_deadline_command", return_value="node238\r\nnode240\r\n\r\nnode125\r\n"):
+            self.assertEqual(DeadlineCommandHelper.get_worker_names(), ["node125", "node238", "node240"])
+            self.assertEqual(DeadlineSubmitNode._check_machine_list(" node238 , NODE240,"), "node238,NODE240")
+            self.assertEqual(DeadlineSubmitNode._check_machine_list(""), "")
+            with self.assertRaisesRegex(ValueError, "nod238"):
+                DeadlineSubmitNode._check_machine_list("node238,nod238")
+        with patch.object(DeadlineCommandHelper, "call_deadline_command", side_effect=RuntimeError("offline")), patch("builtins.print"):
+            self.assertEqual(DeadlineSubmitNode._check_machine_list("a, b"), "a,b")
+
     def test_batch_name_and_job_dependencies(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
