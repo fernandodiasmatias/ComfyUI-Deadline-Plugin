@@ -3,7 +3,21 @@
 Submit ComfyUI jobs to Thinkbox Deadline from inside ComfyUI.
 Check out https://github.com/doubletwisted/ComfyUI-Deadline-Distributed 
 
-Quick demo:
+> **Unofficial fork.** This is a fork of [doubletwisted/ComfyUI-Deadline-Plugin](https://github.com/doubletwisted/ComfyUI-Deadline-Plugin) (MIT), based on release 1.1.0. It is not affiliated with or endorsed by the original author or by Thinkbox/AWS. Everything below the "Changes in this fork" section is the upstream documentation.
+
+## Changes in this fork
+
+Three additions to the `Submit to Deadline` node. All new inputs are optional and appended after the existing ones, so saved workflows keep working.
+
+- **`batch_name`**: writes `BatchName` to the job info, so jobs with the same name are grouped in the Deadline Monitor.
+- **`job_dependencies`**: comma-separated Deadline job IDs (24 hex characters each) written as `JobDependencies`. The job stays Pending until those jobs finish. Values with line breaks or malformed IDs are rejected. It only orders jobs: files produced by one job are not passed to the next automatically, so copy any output that a later job reads as an input into ComfyUI's `input` folder before submitting that job.
+- **Worker picker for `machine_list`**: a **Select workers...** button under the field opens a checklist of the farm's Workers (read with `deadlinecommand -GetSlaveNames` through a new `/deadline/workers` route) and writes the comma-separated list into `machine_list`. On submit, each name is checked against the farm (case-insensitive), and an unknown name such as a typo fails before the job is created. If Deadline cannot be queried, the check is skipped with a log message and the list is sent as typed.
+
+The picker needs a browser reload (Ctrl+F5) after updating the node. The Deadline repository plugin in `plugins/ComfyUI` is unchanged.
+
+Tests: `tests/test_security.py` covers the new inputs and the worker check.
+
+Quick demo (upstream):
 
 <p align="center">
   <a href="https://youtu.be/NFmIvEoEPiU">
