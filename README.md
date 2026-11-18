@@ -1,5 +1,7 @@
 # ComfyUI Deadline Plugin
 
+**English** | [Português (Brasil)](README.pt-BR.md)
+
 Submit ComfyUI jobs to Thinkbox Deadline from inside ComfyUI.
 Check out https://github.com/doubletwisted/ComfyUI-Deadline-Distributed 
 
