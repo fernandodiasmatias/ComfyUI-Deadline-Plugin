@@ -37,7 +37,7 @@ The submitter does not render the workflow locally. It only packages the job and
 Clone this into `ComfyUI/custom_nodes`:
 
 ```bash
-git clone https://github.com/doubletwisted/ComfyUI-Deadline-Plugin.git
+git clone https://github.com/fernandodiasmatias/ComfyUI-Deadline-Plugin.git
 ```
 
 Restart ComfyUI.
